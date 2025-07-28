@@ -15,6 +15,10 @@
 - src/utils/constants.ts — файл с константами
 - src/utils/utils.ts — файл с утилитами
 
+# Ларёк
+
+Одностраничное приложение (SPA) для просмотра каталога товаров, управления корзиной и оформления заказа.
+
 ## Архитектура приложения
 
 * **Паттерн:** MVP (Model-View-Presenter)
@@ -33,216 +37,205 @@
 
 ## Установка и запуск
 
-1. Создать `.env` в корне:
+1. Клонировать репозиторий и перейти в папку проекта:
 
-   ```env
-   API_ORIGIN=https://larek-api.nomoreparties.co
-   ```
-2. Установить зависимости:
-
-   ```bash
-   git clone <repo-url>
-   cd web-larek-frontend
-   ```
-
-yarn install
-
-````
-3. Запустить dev-сервер:
 ```bash
-yarn start
-````
+# Клонирование и переход в директорию
+git clone <repo-url>
+cd web-larek-frontend
 
-4. Собрать продакшн-версию:
+2. Установить зависимости и запустить сервер разработки:
 
    ```bash
+   yarn install
+   yarn start
+   ```
+3. Собрать продакшн-версию:
+
+   ```bash
+   yarn build
    ```
 
-yarn build
+## Архитектура приложения
 
-```
+Приложение построено по паттерну **MVP (Model-View-Presenter)**:
 
-## Список событий
+* **Model** — бизнес-логика и состояние.
+* **View** — работа с DOM и отображение.
+* **Presenter** — связывает Model и View через события.
 
-| Событие            | Источник            | Полезная нагрузка           | Описание                                           |
-| ------------------ | ------------------- | --------------------------- | -------------------------------------------------- |
-| `catalog:loaded`   | `ProductModel`      | `products: Product[]`       | После загрузки списка товаров                     |
-| `product:selected` | `GalleryView`       | `productId: string`         | При клике на карточку товара                      |
-| `detail:added`     | `ProductDetailView` | `product: Product`          | При добавлении товара в корзину из окна деталей    |
-| `basket:updated`   | `BasketModel`       | `items: BasketItem[]`       | После изменения содержимого корзины               |
-| `basket:opened`    | `BasketView`        | —                           | Открытие окна корзины                              |
-| `checkout:init`    | Любой презентер     | —                           | Начало оформления заказа                           |
-| `order:updated`    | `OrderModel`        | `partial: Partial<OrderData>` | После изменения данных заказа                   |
-| `order:submitted`  | `OrderModel`        | `data: OrderData`           | После отправки заказа                              |
-| `order:success`    | `OrderModel`        | `response: OrderResponse`   | При успешном оформлении заказа                     |
-| `modal:close`      | `ModalView`         | —                           | При закрытии любого модального окна                |
+Все классы получают в конструктором экземпляр `EventEmitter` для генерации и подписки на события.
 
-## Классы приложения
+## Структура классов
 
 ### Утилиты (`src/utils`)
 
-#### EventEmitter
-- **Поля:**
-- `private listeners: Record<string, Set<(...args: any[]) => void>>`
-- **Методы:**
-- `on(event: string, handler: (...args: any[]) => void): void`
-- `off(event: string, handler: (...args: any[]) => void): void`
-- `emit(event: string, payload?: any): void`
-- **Конструктор:**
-- `new EventEmitter()`
+#### `EventEmitter`
 
-#### ApiClient
-- **Поля:**
-- `private baseUrl: string`
-- `private emitter: EventEmitter`
-- **Методы:**
-- `get<T>(path: string): Promise<T>`
-- `post<T, U>(path: string, data: U): Promise<T>`
-- `put<T, U>(path: string, data: U): Promise<T>`
-- `delete<T>(path: string): Promise<T>`
-- **Конструктор:**
-- `new ApiClient(baseUrl: string, emitter: EventEmitter)`
+* **Конструктор**: `new EventEmitter()`
+* **Поля:**
 
-### Model (`src/models`)
+  * `private listeners: Record<string, Set<(...args: any[]) => void>>`
+* **Методы:**
 
-#### ProductModel
-- **Поля:**
-- `private api: ApiClient`
-- `private emitter: EventEmitter`
-- `private products: Product[]`
-- **Методы:**
-- `async fetchAll(): Promise<void>` — загружает товары, затем `emit('catalog:loaded', products)`
-- `getById(id: string): Product | undefined`
-- **Конструктор:**
-- `new ProductModel(apiClient: ApiClient, emitter: EventEmitter)`
+  * `on(event: string, handler: (...args: any[]) => void): void`
+  * `off(event: string, handler: (...args: any[]) => void): void`
+  * `emit(event: string, payload?: any): void`
 
-#### BasketModel
-- **Поля:**
-- `private emitter: EventEmitter`
-- `private items: BasketItem[]`
-- **Методы:**
-- `add(item: BasketItem): void` — добавляет и `emit('basket:updated', items)`
-- `remove(productId: string): void` — удаляет и `emit('basket:updated', items)`
-- `getTotal(): number`
-- `clear(): void`
-- **Конструктор:**
-- `new BasketModel(emitter: EventEmitter)`
+#### `ApiClient`
 
-#### OrderModel
-- **Поля:**
-- `private api: ApiClient`
-- `private emitter: EventEmitter`
-- `private data: OrderData`
-- **Методы:**
-- `setPayment(method: 'online' | 'cash'): void`
-- `setAddress(address: string): void`
-- `setContacts(email: string, phone: string): void`
-- `async submit(): Promise<OrderResponse>` — `emit('order:submitted', data)` и `emit('order:success', response)`
-- **Конструктор:**
-- `new OrderModel(apiClient: ApiClient, emitter: EventEmitter)`
+* **Конструктор**: `new ApiClient(baseUrl: string, emitter: EventEmitter)`
+* **Поля:**
 
-### Presenter (`src/presenters`)
+  * `private baseUrl: string`
+  * `private emitter: EventEmitter`
+* **Методы:**
 
-#### GalleryPresenter
-- **Поля:**
-- `private model: ProductModel`
-- `private view: GalleryView`
-- `private emitter: EventEmitter`
-- **Методы:**
-- `init(): void` — вызывает `model.fetchAll()`, подписывается на `catalog:loaded` и вызывает `view.render`
-- **Конструктор:**
-- `new GalleryPresenter(model, view, emitter)`
+  * `get<T>(path: string): Promise<T>`
+  * `post<T, U>(path: string, data: U): Promise<T>`
+  * `put<T, U>(path: string, data: U): Promise<T>`
+  * `delete<T>(path: string): Promise<T>`
 
-#### ProductDetailPresenter
-- **Поля:**
-- `private model: ProductModel`
-- `private basket: BasketModel`
-- `private view: ProductDetailView`
-- `private emitter: EventEmitter`
-- **Методы:**
-- `init(): void` — подписывается на `product:selected` и `view.bindAdd`
-- **Конструктор:**
-- `new ProductDetailPresenter(model, basket, view, emitter)`
+### Модели (`src/models`)
 
-#### BasketPresenter
-- **Поля:**
-- `private model: BasketModel`
-- `private view: BasketView`
-- `private emitter: EventEmitter`
-- **Методы:**
-- `init(): void` — подписывается на `basket:updated` и `view.bindRemove`, открывает корзину по `basket:opened`
-- **Конструктор:**
-- `new BasketPresenter(model, view, emitter)`
+#### `ProductModel`
 
-#### OrderPresenter
-- **Поля:**
-- `private model: OrderModel`
-- `private view: OrderView`
-- `private emitter: EventEmitter`
-- **Методы:**
-- `init(): void` — подписывается на `checkout:init`, `order:updated`, `view.bindSubmit`
-- **Конструктор:**
-- `new OrderPresenter(model, view, emitter)`
+* **Конструктор**: `new ProductModel(api: ApiClient, emitter: EventEmitter)`
+* **Поля:**
 
-### View (`src/views`)
-> Все классы View получают в конструкторе:
-> - `root: HTMLElement`
-> - `template: HTMLTemplateElement`
-> - `emitter: EventEmitter`
-> Поля в них — только ссылки на DOM-элементы; состояние хранится в Model.
+  * `private api: ApiClient`
+  * `private emitter: EventEmitter`
+  * `private products: Product[]`
+* **Методы:**
 
-#### GalleryView
-- **Поля:**
-- `private root: HTMLElement` — `.gallery`
-- `private template: HTMLTemplateElement` — `#card-catalog`
-- **Методы:**
-- `render(items: Product[]): void`
-- `bindItemClick(handler: (id: string) => void): void`
+  * `fetchAll(): Promise<void>` — загрузить список, затем `emit('catalog:loaded', { products })`
+  * `getById(id: string): Product | undefined`
 
-#### ModalView
-- **Поля:**
-- `protected container: HTMLElement` — `.modal`
-- `protected closeBtn: HTMLButtonElement`
-- `protected content: HTMLElement`
-- **Методы:**
-- `open(): void`
-- `close(): void`
-- `setContent(el: HTMLElement): void`
+#### `BasketModel`
 
-#### ProductDetailView extends ModalView
-- **Поля:**
-- `private template: HTMLTemplateElement` — `#card-preview`
-- **Методы:**
-- `show(product: Product): void`
-- `bindAdd(handler: (product: Product) => void): void`
+* **Конструктор**: `new BasketModel(emitter: EventEmitter)`
+* **Поля:**
 
-#### BasketView extends ModalView
-- **Поля:**
-- `private template: HTMLTemplateElement` — `#basket`
-- `private list: HTMLElement` — `.basket__list`
-- `private total: HTMLElement` — `.basket__price`
-- **Методы:**
-- `render(items: BasketItem[]): void`
-- `bindRemove(handler: (id: string) => void): void`
-- `bindCheckout(handler: () => void): void`
+  * `private emitter: EventEmitter`
+  * `private items: BasketItem[]`
+* **Методы:**
 
-#### OrderView extends ModalView
-- **Поля:**
-- `private form: HTMLFormElement`
-- `private addressInput: HTMLInputElement`
-- `private emailInput: HTMLInputElement`
-- `private phoneInput: HTMLInputElement`
-- **Методы:**
-- `showStep1(): void`
-- `showStep2(): void`
-- `showStep3(): void`
-- `bindSubmit(handler: (data: Partial<OrderData>) => void): void`
+  * `add(item: BasketItem): void` — добавить, затем `emit('basket:updated', { items })`
+  * `remove(productId: string): void` — удалить, затем `emit('basket:updated', { items })`
+  * `getItems(): BasketItem[]`
+  * `clear(): void`
 
-#### SuccessView extends ModalView
-- **Поля:**
-- `private template: HTMLTemplateElement` — `#success`
-- **Методы:**
-- `show(total: number): void`
-- `bindClose(handler: () => void): void`
+#### `OrderModel`
 
-```
+* **Конструктор**: `new OrderModel(api: ApiClient, emitter: EventEmitter)`
+* **Поля:**
+
+  * `private api: ApiClient`
+  * `private emitter: EventEmitter`
+  * `private data: OrderData`
+* **Методы:**
+
+  * `setPayment(method: 'online' | 'cash'): void`
+  * `setAddress(address: string): void`
+  * `setContacts(email: string, phone: string): void`
+  * `submit(): Promise<OrderResult>` — отправить, затем `emit('order:submitted', { data })` и `emit('order:success', { response })`
+
+### Представления (`src/views`)
+
+Все классы View получают конструктором:
+
+* `root: HTMLElement` — контейнер в DOM
+* `template: HTMLTemplateElement` — шаблон из `index.html`
+* `emitter: EventEmitter`
+
+Состояние в View не хранится, только ссылки на элементы.
+
+#### `GalleryView`
+
+* **Конструктор**: `new GalleryView(root, template, emitter)`
+* **Поля:**
+
+  * `private root: HTMLElement`
+  * `private template: HTMLTemplateElement`
+* **Методы:**
+
+  * `render(items: Product[]): void`
+  * `bindItemClick(handler: (id: string) => void): void`
+
+#### `ProductDetailView extends ModalView`
+
+* **Методы:**
+
+  * `show(product: Product): void`
+  * `bindAdd(handler: (productId: string) => void): void`
+
+#### `BasketView extends ModalView`
+
+* **Методы:**
+
+  * `render(items: BasketItem[]): void`
+  * `bindRemove(handler: (productId: string) => void): void`
+  * `bindCheckout(handler: () => void): void`
+
+#### `OrderView extends ModalView`
+
+* **Методы:**
+
+  * `showStep1/2/3(): void`
+  * `bindSubmit(handler: (data: Partial<OrderData>) => void): void`
+
+#### `SuccessView extends ModalView`
+
+* **Методы:**
+
+  * `show(total: number): void`
+  * `bindClose(handler: () => void): void`
+
+### Презентеры (`src/presenters`)
+
+#### `GalleryPresenter`
+
+* **Конструктор**: `new GalleryPresenter(model, view, emitter)`
+* **Методы:**
+
+  * `init(): void` — `model.fetchAll()`, слушает `catalog:loaded` → `view.render`
+
+#### `ProductDetailPresenter`
+
+* **Конструктор**: `new ProductDetailPresenter(model, basket, view, emitter)`
+* **Методы:**
+
+  * `init(): void` — слушает `product:selected`, `view.bindAdd` → `basket.add`
+
+#### `BasketPresenter`
+
+* **Конструктор**: `new BasketPresenter(model, view, emitter)`
+* **Методы:**
+
+  * `init(): void` — слушает `basket:updated` → `view.render`, `view.bindRemove`, `view.bindCheckout`
+
+#### `OrderPresenter`
+
+* **Конструктор**: `new OrderPresenter(model, view, emitter)`
+* **Методы:**
+
+  * `init(): void` — слушает `checkout:init`, `order:updated`, `view.bindSubmit` → `model.submit`
+
+## События
+
+| Событие            | Генератор           | Payload                        | Описание                                  |
+| ------------------ | ------------------- | ------------------------------ | ----------------------------------------- |
+| `catalog:loaded`   | `ProductModel`      | `{ products: Product[] }`      | После загрузки каталога                   |
+| `product:selected` | `GalleryView`       | `{ productId: string }`        | При клике на карточку                     |
+| `detail:added`     | `ProductDetailView` | `{ product: Product }`         | При добавлении в корзину из окна деталей  |
+| `basket:updated`   | `BasketModel`       | `{ items: BasketItem[] }`      | После изменения корзины                   |
+| `basket:opened`    | `BasketView`        | `undefined`                    | При открытии корзины                      |
+| `checkout:init`    | любой Presenter     | `undefined`                    | Начало оформления заказа                  |
+| `order:updated`    | `OrderView`         | `{ data: Partial<OrderData> }` | При изменении данных заказа               |
+| `order:submitted`  | `OrderModel`        | `{ data: OrderData }`          | При отправке заказа                       |
+| `order:success`    | `OrderModel`        | `{ response: OrderResult }`    | При успешном ответе API о создании заказа |
+| `modal:close`      | `ModalView`         | `undefined`                    | При закрытии любого модального окна       |
+
+---
+
+*Документация отражает архитектуру и основные классы приложения «Ларёк».*
