@@ -29,18 +29,14 @@
    git clone <repo-url>
    cd web-larek-frontend
    ```
-2. Создать файл `.env` в корне проекта и добавить:
 
-   ```env
-   API_ORIGIN=https://larek-api.nomoreparties.co
-   ```
-3. Установить зависимости и запустить dev-сервер:
+2. Установить зависимости и запустить dev-сервер:
 
    ```bash
    yarn install
    yarn start
    ```
-4. Собрать production-бандл:
+3. Собрать production-бандл:
 
    ```bash
    yarn build
