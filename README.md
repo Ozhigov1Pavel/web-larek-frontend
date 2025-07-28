@@ -17,196 +17,266 @@
 
 # Ларёк
 
-**Одностраничное приложение** для просмотра каталога товаров, добавления в корзину и оформления заказа.
+Одностраничное приложение (SPA) для просмотра каталога товаров, управления корзиной и оформления заказа.
 
----
 
 ## Установка и запуск
 
-1. Клонировать репозиторий и перейти в папку проекта:
+```bash
+# Клонирование и переход в директорию
+git clone <repo-url>
+cd web-larek-frontend
 
-   ```bash
-   git clone <repo-url>
-   cd web-larek-frontend
-   ```
+# Установка зависимостей и запуск дев-сервера
+yarn install
+yarn start
 
-2. Установить зависимости и запустить dev-сервер:
+# Сборка продакшн-версии
+yarn build
+```
 
-   ```bash
-   yarn install
-   yarn start
-   ```
-3. Собрать production-бандл:
+## Общая архитектура (MVP)
 
-   ```bash
-   yarn build
-   ```
+**Model–View–Presenter**:
 
----
+* **Model** — хранит состояние и бизнес‑логику, выполненная работа по валидации и изменениям данных; не обращается напрямую к DOM и не вызывает HTTP-запросы.
+* **View** — отвечает только за работу с DOM: отрисовку, получение данных из полей и добавление слушателей встроенных браузерных событий (`addEventListener`). Не содержит бизнес‑логики.
+* **Presenter** — единственное место, где происходит:
 
-## Архитектура (MVP)
+  * вызов методов API;
+  * создание всех экземпляров моделей, представлений и `EventEmitter`;
+  * подписка на сгенерированные события (`emitter.on(...)`);
+  * вызов методов моделей и представлений в ответ на события.
 
-* **Model** (`src/models`): слой управления данными, хранит состояние и не выполняет рендер.
-* **View** (`src/views`): слой отображения, привязывает браузерные события через `addEventListener`, не содержит бизнес-логику.
-* **Presenter** (`src/index.ts`): единственная точка подписки на события `emitter.on`, координирует вызовы моделей и обновление представлений.
+Связь между Model и View осуществляется строго через `EventEmitter`:
 
-> Все классы получают в конструкторе экземпляр `EventEmitter` для генерации и подписки, но **подписка** (`on`) выполняется исключительно в `index.ts`.
+1. В конструкторе каждого класса (Model или View) сохраняется ссылка на один и тот же экземпляр `emitter`.
+2. View добавляет слушатели встроенных событий на элементы (`click`, `input` и т.д.) и в них генерирует собственные события через `emitter.emit(...)`.
+3. Presenter (`index.ts`) подписывается (`emitter.on`) на все события и вызывает нужные методы моделей или представлений.
+4. Модель после изменения состояния **только** генерирует события через `emitter.emit`, а не вызывает View напрямую.
 
----
+> 🔔 **Важно**: подписка на события (`emitter.on`) должна происходить только в `src/index.ts`. Во View и Model — только вызовы `emitter.emit(...)`.
 
-## Слои и классы
+## Структура проекта
 
-### Утилиты (`src/utils`)
-
-* **EventEmitter** — базовый брокер событий:
-
-  * `on(event, handler)`, `off(event, handler)`, `emit(event, payload)`
-* **ApiClient** — HTTP-клиент, используется только в `index.ts`
-
-### Контейнер модального окна (`src/views/Modal.ts`)
-
-* **Modal**:
-
-  * **Поля:** контейнер `#modal-container`, кнопка «закрыть»
-  * **Методы:**
-
-    * `render(content: HTMLElement): void` — отображает переданный контент
-    * `close(): void` — скрывает окно
-
-### Карточка товара (`src/views/CardView.ts`)
-
-* **CardView** — универсальный класс для всех шаблонов карточки:
-
-  * **Конструктор:**
-
-    ```ts
-    new CardView(
-      template: HTMLTemplateElement,
-      data: ProductDto,
-      onAction: (action: 'select' | 'add' | 'remove', dto: ProductDto) => void
-    )
-    ```
-  * **Метод:** `create(): HTMLElement` —
-
-    1. Клонирует `template.content`.
-    2. Заполняет поля из `data`.
-    3. Привязывает `addEventListener` к кнопкам «Подробнее» (`onAction('select', data)`), «Добавить» (`onAction('add', data)`), «Удалить» (`onAction('remove', data)`).
-    4. Возвращает готовый элемент карточки.
-
-### Представления (View)
-
-#### MainPageView (`src/views/MainPageView.ts`)
-
-> Ранее именовался `GalleryView`.
-
-* **Поля:**
-
-  * `root` — контейнер `.gallery`
-  * `basketButton` — `.header__basket`
-  * `basketCounter` — `.header__basket-counter`
-* **Методы:**
-
-  * `render(cards: HTMLElement[]): void` — `replaceChildren(cards)`
-  * `bindBasketOpen(fn: () => void): void` — `addEventListener('click')` на `basketButton`
-  * `updateCounter(count: number): void` — обновляет `basketCounter`
-
-#### ProductDetailView (`src/views/ProductDetailView.ts`)
-
-> **Не наследует** `Modal`, а **использует** его экземпляр.
-
-* **Поля:**
-
-  * `template`: HTMLTemplateElement `#card-detail`
-  * `modal`: `Modal`
-* **Метод:**
-
-  * `show(data: ProductDto): void` —
-
-    1. Клонирует шаблон, заполняет поля из `data`.
-    2. Привязывает `click` на кнопку «Добавить» для `emit('detail:add', { productId: data.id })`.
-    3. Передаёт контент в `modal.render(content)`.
-
-#### CartView (`src/views/CartView.ts`)
-
-* **Поля:**
-
-  * `container`: элемент списка `.basket__list`
-  * `totalDisplay`: `.basket__total`
-* **Методы:**
-
-  * `render(cards: HTMLElement[]): void` — `replaceChildren(cards)`
-  * `showTotal(total: number): void` — обновляет `totalDisplay`
-  * `bindCheckout(fn: () => void): void` — `addEventListener('click')` на кнопку «Оформить заказ»
-
-#### OrderFormView (`src/views/OrderFormView.ts`)
-
-* **Поля:** ссылки на input-элементы формы, radio-оплаты, кнопку submit.
-* **Методы:**
-
-  * `show(): void` — `modal.render(formElement)`
-  * `bindValidation(fn: (field: keyof OrderRequestDto, value: string) => void): void` — `input`/`change`
-  * `bindSubmit(fn: (data: OrderRequestDto) => void): void` — `submit` формы
-  * `displayValidation(result: ValidationResult): void` — отображение ошибок, блокировка кнопки
-
-> **Валидация**: модель `OrderModel.validateField` возвращает `ValidationResult`, через `emit('form:validated')` приходит обратно сюда.
-
-#### SuccessView (`src/views/SuccessView.ts`)
-
-* **Методы:**
-
-  * `show(total: number): void` — `modal.render(successContent)`
-  * `bindClose(fn: () => void): void` — `click` на крестик
+```
+src/
+├── index.ts           # точка входа (Presenter)
+├── api.ts             # обёртка над Fetch; используется лишь в index.ts
+├── events.ts          # перечисление констант имен событий
+├── types/             # объявления DTO и интерфейсов
+│   └── index.ts       # ProductDto, OrderRequestDto, EventNames и т. д.
+├── models/            # Model: состояние и бизнес‑логика
+│   ├── ProductModel.ts
+│   ├── BasketModel.ts
+│   └── OrderModel.ts
+├── views/             # View: работа с DOM
+│   ├── Modal.ts
+│   ├── CardView.ts
+│   ├── GalleryView.ts
+│   ├── ProductDetailView.ts
+│   ├── CartView.ts
+│   ├── OrderFormView.ts
+│   └── SuccessView.ts
+└── utils/
+    └── EventEmitter.ts
+```
 
 ---
 
-### Модели (Model)
+## Model
 
-#### ProductModel (`src/models/ProductModel.ts`)
+### ProductModel
 
-* **Поля:** internal `ProductDto[]`
-* **Методы:**
+```ts
+constructor(emitter: EventEmitter)
+private products: ProductDto[] = []
 
-  * `setProducts(items: ProductDto[]): void` — сохраняет и `emit('catalog:loaded', { products: items })`
-  * `getProducts(): ProductDto[]`
-  * `getById(id: string): ProductDto | undefined`
+setProducts(data: ProductDto[]): void
+  // сохраняет в this.products и emit('catalog:loaded', { products: this.products })
 
-#### BasketModel (`src/models/BasketModel.ts`)
+getAll(): ProductDto[]
+  // возвращает this.products
+```
 
-* **Поля:** internal `string[]` (ID товаров)
-* **Методы:**
+### BasketModel
 
-  * `add(id: string): void` — `emit('cart:updated', { items })`
-  * `remove(id: string): void` — `emit('cart:updated', { items })`
-  * `getItems(): string[]`
-  * `clear(): void`
+```ts
+constructor(emitter: EventEmitter)
+private items: string[] = []
 
-#### OrderModel (`src/models/OrderModel.ts`)
+add(productId: string): void
+  // добавляет, если ещё нет, и emit('basket:updated', { items: this.items })
 
-* **Поля:** хранит `OrderRequestDto`
-* **Методы:**
+remove(productId: string): void
+  // удаляет, если есть, и emit('basket:updated', { items: this.items })
 
-  * `setPayment/Address/Email/Phone/Items/Total(...)`
-  * `getOrderData(): OrderRequestDto`
-  * `validateField(field, value): ValidationResult` — `emit('form:validated', { result })`
+clear(): void
+  // очищает корзину и emit('basket:updated', { items: [] })
+
+getItems(): string[]
+```
+
+### OrderModel
+
+```ts
+constructor(emitter: EventEmitter)
+private payment: 'online' | 'cash' | null = null
+private address = ''
+private contacts = { email: '', phone: '' }
+private items: string[] = []
+private total = 0
+
+setPayment(method: 'online' | 'cash'): void
+  // валидация, this.payment = method и emit('order:validated', { field: 'payment', valid })
+
+setAddress(address: string): void
+  // валидация, this.address = address и emit('order:validated', { field: 'address', valid })
+
+setContacts(email: string, phone: string): void
+  // валидация, this.contacts = {...} и emit('order:validated', { field: 'contacts', valid })
+
+setItems(items: string[]): void
+setTotal(amount: number): void
+
+submit(): Promise<void>
+  // вызывает API (через Presenter), затем emit('order:submitted', { request }), и при успехе emit('order:success', { response })
+```
+
+> ❗️ Методы запроса к серверу **не** реализуются внутри моделей — их должен вызвать Presenter.
 
 ---
 
-## События (Presenter в `src/index.ts`)
+## View
 
-| Событие          | Генерируется                  | Payload                          | Действие в Presenter                            |
-| ---------------- | ----------------------------- | -------------------------------- | ----------------------------------------------- |
-| `catalog:loaded` | `ProductModel.setProducts`    | `{ products: ProductDto[] }`     | `MainPageView.render`                           |
-| `card:select`    | `CardView`                    | `{ productId: string }`          | эмит `preview:change`                           |
-| `preview:change` | Presenter                     | `{ product: ProductDto }`        | `ProductDetailView.show`                        |
-| `detail:add`     | `ProductDetailView`           | `{ productId: string }`          | `BasketModel.add`                               |
-| `cart:updated`   | `BasketModel`                 | `{ items: string[] }`            | `CartView.render`, `MainPageView.updateCounter` |
-| `basket:open`    | `MainPageView.bindBasketOpen` | `undefined`                      | `CartView.render`                               |
-| `checkout:init`  | `CartView.bindCheckout`       | `undefined`                      | `OrderFormView.show`                            |
-| `form:validated` | `OrderModel.validateField`    | `{ result: ValidationResult }`   | `OrderFormView.displayValidation`               |
-| `order:submit`   | `OrderFormView.bindSubmit`    | `{ data: OrderRequestDto }`      | API-запрос → `emit('order:success')`            |
-| `order:success`  | APIClient callback            | `{ response: OrderResponseDto }` | `SuccessView.show`                              |
-| `modal:close`    | `SuccessView.bindClose`       | `undefined`                      | `Modal.close`                                   |
+### Modal
+
+Универсальный контейнер для отображения любого контента из шаблонов `index.html`.
+
+```ts
+constructor(emitter: EventEmitter)
+private container = document.getElementById('modal-container')!
+
+render(content: HTMLElement): void
+  // вставить content, добавить класс открытого модального
+
+close(): void
+  // убрать контент и закрыть модальное окно
+```
+
+### CardView
+
+Одна реализация для любых трёх шаблонов карточки (галерея, детальный просмотр, корзина).
+
+```ts
+constructor(
+  emitter: EventEmitter,
+  templateSelector: string,     // CSS-селектор нужного template
+  data: ProductDto | BasketItemDto,
+  callbacks: Record<string, (id: string) => void>
+)
+create(): HTMLElement
+  // клонирует template, заполняет поля, добавляет обработчики click на кнопки через callbacks
+```
+
+### GalleryView
+
+Главная страница с галереей товаров и иконкой корзины.
+
+```ts
+constructor(emitter: EventEmitter)
+private basketBtn = document.querySelector('.header__basket')!
+private counterEl = document.querySelector('.header__basket-counter')!
+
+render(cards: HTMLElement[]): void
+  // this.root.replaceChildren(...cards)
+
+bindBasketOpen(handler: () => void): void
+  // this.basketBtn.addEventListener('click', handler)
+
+updateCounter(count: number): void
+  // this.counterEl.textContent = String(count)
+```
+
+### ProductDetailView
+
+Показывает карточку товара внутри Modal (композиция).
+
+```ts
+constructor(emitter: EventEmitter, modal: Modal)
+show(product: ProductDto): void
+  // создает CardView с детальным шаблоном и вставляет в modal.render
+
+bindAdd(handler: (id: string) => void): void
+  // внутри CardView
+```
+
+### CartView
+
+Список товаров в корзине и кнопка «Оформить».
+
+```ts
+constructor(emitter: EventEmitter, modal: Modal)
+render(cards: HTMLElement[], total: number): void
+  // this.list.replaceChildren(...cards); this.totalEl.textContent = total
+
+bindCheckout(handler: () => void): void
+  // this.checkoutBtn.addEventListener('click', handler)
+```
+
+### OrderFormView
+
+Форма оформления заказа (шаги 1 и 2).
+
+```ts
+constructor(emitter: EventEmitter, modal: Modal)
+showStep1(): void
+showStep2(): void
+showSuccess(): void
+
+bindPaymentSelection(handler: (method: string) => void): void
+bindAddressInput(handler: (value: string) => void): void
+bindContactInput(handler: (field: 'email'|'phone', value: string) => void): void
+bindSubmit(handler: () => void): void
+
+displayValidation(errors: Record<string,string>): void
+  // показывает текст ошибок и блокирует/разблокирует кнопку Next/Submit
+```
+
+### SuccessView
+
+Отображает сообщение об успехе и сумму заказа.
+
+```ts
+constructor(emitter: EventEmitter, modal: Modal)
+bindClose(handler: () => void): void
+show(total: number): void
+```
 
 ---
+
+## События и Presenter (`src/index.ts`)
+
+Единая точка входа:
+
+1. Создает `emitter = new EventEmitter()`, `api = new ApiClient()`, модели, views и `modal`.
+2. Подписывается на события через `emitter.on(eventName, handler)`:
+
+   * `app:init` → вызвать `api.get('/products')`, затем `model.setProducts(data)`
+   * `catalog:loaded` → в handler вызвать GalleryView\.render(\[...cards])
+   * `card:select` → ProductDetailView\.show(productDto)
+   * `detail:add` → BasketModel.add(id)
+   * `basket:updated` → обновить GalleryView\.updateCounter и при открытии CartView\.render
+   * `checkout:init` → OrderFormView\.showStep1()
+   * `order:validated` → OrderFormView\.displayValidation(errors)
+   * `order:submit` → OrderModel.submit()
+   * `order:success` → SuccessView\.show(response.total)
+   * `modal:close` → Modal.close()
+3. Инициирует `emitter.emit('app:init')` при загрузке страницы.
+
+> 🎯 В `index.ts` — инициализация, API-вызовы и все `on`–обработчики. Модели и Views **только** `emit`.
+
+---
+
 
 
