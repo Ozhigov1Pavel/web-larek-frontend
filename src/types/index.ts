@@ -1,6 +1,6 @@
 // src/types/index.ts
 
-/** API-DTO объекты */
+/** API DTO */
 
 /** Ответ API при получении списка товаров */
 export interface ProductListResponse {
@@ -23,12 +23,11 @@ export type ProductDetailResponse = ProductDto;
 
 /** Параметры запроса при оформлении заказа */
 export interface OrderRequestDto {
+  items: string[];           // массив id товаров (каждый добавляется по одной штуке)
+  address: string;
   payment: 'online' | 'cash';
   email: string;
   phone: string;
-  address: string;
-  total: number;
-  items: string[]; // массив id товаров
 }
 
 /** Ответ API при успешном оформлении заказа */
@@ -37,13 +36,13 @@ export interface OrderResponseDto {
   total: number;
 }
 
-/** Результат валидации формы заказа */
+/** Результат валидации поля */
 export interface ValidationResult {
   valid: boolean;
   errors: Record<string, string>;
 }
 
-/** Модель данных заказа (расширяет запрос) */
+/** Данные формы заказа во фронтенде */
 export type OrderData = OrderRequestDto;
 
 /** Интерфейсы моделей (Model) */
@@ -55,39 +54,52 @@ export interface IProductModel {
   getById(id: string): ProductDto | undefined;
 }
 
-/** Работа с корзиной (хранит массив id товаров) */
+/** Работа с корзиной */
 export interface IBasketModel {
   add(productId: string): void;
   remove(productId: string): void;
-  getItems(): string[];
   clear(): void;
+  getItems(): string[];
 }
 
 /** Работа с заказом */
 export interface IOrderModel {
-  setPayment(method: 'online' | 'cash'): void;
-  setAddress(address: string): void;
-  setEmail(email: string): void;
-  setPhone(phone: string): void;
   setItems(items: string[]): void;
   setTotal(total: number): void;
-  getOrderData(): OrderRequestDto;
-  validateField(field: keyof OrderRequestDto, value: string): ValidationResult;
+  setPayment(method: 'online' | 'cash'): void;
+  setAddress(address: string): void;
+  setContacts(email: string, phone: string): void;
+  validateField(field: keyof OrderRequestDto): ValidationResult;
+  getOrderRequest(): OrderRequestDto;
 }
 
-/** HTTP-клиент для API (используется только в index.ts) */
+/** HTTP-клиент для API (используется в Presenter) */
 export interface ApiClient {
   get<T>(path: string): Promise<T>;
   post<T, U>(path: string, data: U): Promise<T>;
-  put<T, U>(path: string, data: U): Promise<T>;
-  delete<T>(path: string): Promise<T>;
 }
 
 /** Интерфейс брокера событий */
 export interface IEventEmitter {
-  on<E extends EventType>(event: E, handler: (payload: EventPayloads[E]) => void): void;
-  off<E extends EventType>(event: E, handler: (payload: EventPayloads[E]) => void): void;
-  emit<E extends EventType>(event: E, payload: EventPayloads[E]): void;
+  on(event: EventName, handler: (payload: any) => void): void;
+  off(event: EventName, handler: (payload: any) => void): void;
+  emit(event: EventName, payload?: any): void;
+}
+
+/** Имена событий приложения */
+export enum EventName {
+  AppInit          = 'app:init',
+  CatalogLoaded    = 'catalog:loaded',
+  CardSelect       = 'card:select',
+  PreviewChange    = 'preview:change',
+  DetailAdd        = 'detail:add',
+  BasketUpdated    = 'basket:updated',
+  BasketOpen       = 'basket:open',
+  CheckoutInit     = 'checkout:init',
+  OrderValidated   = 'order:validated',
+  OrderSubmit      = 'order:submit',
+  OrderSuccess     = 'order:success',
+  ModalClose       = 'modal:close'
 }
 
 /** Интерфейсы представлений (View) */
@@ -95,70 +107,49 @@ export interface IEventEmitter {
 /** Идентификаторы шаблонов карточки */
 export type TemplateId = '#card-main' | '#card-detail' | '#card-cart';
 
-/** Конфигурация карточки товара */
+/** Конфигурация CardView */
 export interface CardConfig {
   templateId: TemplateId;
   data: ProductDto;
-  onClick: (data: ProductDto) => void;
+  callbacks: {
+    onSelect: (id: string) => void;
+    onAdd?: (id: string) => void;
+    onRemove?: (id: string) => void;
+  };
 }
 
-/** Представление главной страницы: галерея и корзина */
-export interface IMainPageView {
+/** Галерея товаров */
+export interface IGalleryView {
   render(cards: HTMLElement[]): void;
   bindBasketOpen(handler: () => void): void;
   updateCounter(count: number): void;
 }
 
-/** Представление деталей товара в модальном окне */
+/** Детали товара в модальном окне */
 export interface IProductDetailView {
-  show(data: ProductDto): void;
+  show(product: ProductDto): void;
   bindAdd(handler: (productId: string) => void): void;
 }
 
-/** Представление корзины */
+/** Корзина в модальном окне */
 export interface ICartView {
-  render(cards: HTMLElement[]): void;
+  render(cards: HTMLElement[], total: number): void;
   bindCheckout(handler: () => void): void;
 }
 
-/** Представление формы оформления заказа */
+/** Форма оформления заказа */
 export interface IOrderFormView {
-  show(): void;
-  bindSubmit(handler: (data: OrderRequestDto) => void): void;
-  bindValidation(handler: (field: keyof OrderRequestDto, value: string) => void): void;
-  displayValidation(result: ValidationResult): void;
+  showStep1(): void;
+  showStep2(): void;
+  bindPaymentSelection(handler: (method: 'online' | 'cash') => void): void;
+  bindAddressInput(handler: (address: string) => void): void;
+  bindContactInput(handler: (field: 'email' | 'phone', value: string) => void): void;
+  bindSubmit(handler: () => void): void;
+  displayValidation(errors: Record<string, string>): void;
 }
 
-/** Представление окна успеха после заказа */
+/** Окно успеха заказа */
 export interface ISuccessView {
   show(total: number): void;
   bindClose(handler: () => void): void;
-}
-
-/** События приложения и их payload */
-export type EventType =
-  | 'catalog:loaded'
-  | 'card:select'
-  | 'preview:change'
-  | 'detail:add'
-  | 'cart:updated'
-  | 'basket:open'
-  | 'checkout:init'
-  | 'form:validated'
-  | 'order:submit'
-  | 'order:success'
-  | 'modal:close';
-
-export interface EventPayloads {
-  'catalog:loaded': { products: ProductDto[] };
-  'card:select': { productId: string };
-  'preview:change': { product: ProductDto };
-  'detail:add': { productId: string };
-  'cart:updated': { items: string[] };
-  'basket:open': undefined;
-  'checkout:init': undefined;
-  'form:validated': { result: ValidationResult };
-  'order:submit': { data: OrderRequestDto };
-  'order:success': { response: OrderResponseDto };
-  'modal:close': undefined;
 }
