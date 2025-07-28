@@ -1,8 +1,6 @@
 // src/types/index.ts
 
-/**
- * API DTO-объекты
- */
+/** API-DTO объекты */
 
 /** Ответ API при получении списка товаров */
 export interface ProductListResponse {
@@ -39,46 +37,45 @@ export interface OrderResponseDto {
   total: number;
 }
 
-/**
- * Внутренние модели данных (доменная область)
- */
-
-/** Товар в приложении (после трансформации из DTO) */
-export interface Product {
-  id: string;
-  title: string;
-  description: string;
-  category: string;
-  imageUrl: string;
-  price: number;
+/** Результат валидации формы заказа */
+export interface ValidationResult {
+  valid: boolean;
+  errors: Record<string, string>;
 }
 
-/** Элемент корзины */
-export interface BasketItem {
-  productId: string;
-  quantity: number;
+/** Модель данных заказа (расширяет запрос) */
+export type OrderData = OrderRequestDto;
+
+/** Интерфейсы моделей (Model) */
+
+/** Работа с данными товаров */
+export interface IProductModel {
+  setProducts(items: ProductDto[]): void;
+  getProducts(): ProductDto[];
+  getById(id: string): ProductDto | undefined;
 }
 
-/** Данные заказа в приложении */
-export interface OrderData {
-  items: BasketItem[];
-  address: string;
-  payment: 'online' | 'cash';
-  email: string;
-  phone: string;
+/** Работа с корзиной (хранит массив id товаров) */
+export interface IBasketModel {
+  add(productId: string): void;
+  remove(productId: string): void;
+  getItems(): string[];
+  clear(): void;
 }
 
-/** Результат создания заказа */
-export interface OrderResult {
-  orderId: string;
-  total: number;
+/** Работа с заказом */
+export interface IOrderModel {
+  setPayment(method: 'online' | 'cash'): void;
+  setAddress(address: string): void;
+  setEmail(email: string): void;
+  setPhone(phone: string): void;
+  setItems(items: string[]): void;
+  setTotal(total: number): void;
+  getOrderData(): OrderRequestDto;
+  validateField(field: keyof OrderRequestDto, value: string): ValidationResult;
 }
 
-/**
- * Интерфейсы основных слоёв
- */
-
-/** HTTP-клиент для взаимодействия с API */
+/** HTTP-клиент для API (используется только в index.ts) */
 export interface ApiClient {
   get<T>(path: string): Promise<T>;
   post<T, U>(path: string, data: U): Promise<T>;
@@ -93,89 +90,75 @@ export interface IEventEmitter {
   emit<E extends EventType>(event: E, payload: EventPayloads[E]): void;
 }
 
-/** Интерфейс модели товаров */
-export interface IProductModel {
-  fetchAll(): Promise<void>;
-  getById(id: string): Product | undefined;
+/** Интерфейсы представлений (View) */
+
+/** Идентификаторы шаблонов карточки */
+export type TemplateId = '#card-main' | '#card-detail' | '#card-cart';
+
+/** Конфигурация карточки товара */
+export interface CardConfig {
+  templateId: TemplateId;
+  data: ProductDto;
+  onClick: (data: ProductDto) => void;
 }
 
-/** Интерфейс модели корзины */
-export interface IBasketModel {
-  add(item: BasketItem): void;
-  remove(productId: string): void;
-  getItems(): BasketItem[];
-  clear(): void;
+/** Представление главной страницы: галерея и корзина */
+export interface IMainPageView {
+  render(cards: HTMLElement[]): void;
+  bindBasketOpen(handler: () => void): void;
+  updateCounter(count: number): void;
 }
 
-/** Интерфейс модели заказа */
-export interface IOrderModel {
-  setPayment(method: 'online' | 'cash'): void;
-  setAddress(address: string): void;
-  setContacts(email: string, phone: string): void;
-  submit(): Promise<OrderResult>;
-}
-
-/**
- * Интерфейсы слоёв View
- */
-
-/** Представление галереи товаров */
-export interface IGalleryView {
-  render(items: Product[]): void;
-  bindItemClick(handler: (id: string) => void): void;
-}
-
-/** Представление деталей товара */
+/** Представление деталей товара в модальном окне */
 export interface IProductDetailView {
-  show(product: Product): void;
+  show(data: ProductDto): void;
   bindAdd(handler: (productId: string) => void): void;
 }
 
 /** Представление корзины */
-export interface IBasketView {
-  render(items: BasketItem[]): void;
-  bindRemove(handler: (productId: string) => void): void;
+export interface ICartView {
+  render(cards: HTMLElement[]): void;
   bindCheckout(handler: () => void): void;
 }
 
-/** Представление оформления заказа */
-export interface IOrderView {
-  showStep1(): void;
-  showStep2(): void;
-  showStep3(): void;
-  bindSubmit(handler: (data: Partial<OrderData>) => void): void;
+/** Представление формы оформления заказа */
+export interface IOrderFormView {
+  show(): void;
+  bindSubmit(handler: (data: OrderRequestDto) => void): void;
+  bindValidation(handler: (field: keyof OrderRequestDto, value: string) => void): void;
+  displayValidation(result: ValidationResult): void;
 }
 
-/** Представление успешного заказа */
+/** Представление окна успеха после заказа */
 export interface ISuccessView {
   show(total: number): void;
   bindClose(handler: () => void): void;
 }
 
-/**
- * События приложения и их payload
- */
+/** События приложения и их payload */
 export type EventType =
   | 'catalog:loaded'
-  | 'product:selected'
-  | 'detail:added'
-  | 'basket:updated'
-  | 'basket:opened'
+  | 'card:select'
+  | 'preview:change'
+  | 'detail:add'
+  | 'cart:updated'
+  | 'basket:open'
   | 'checkout:init'
-  | 'order:updated'
-  | 'order:submitted'
+  | 'form:validated'
+  | 'order:submit'
   | 'order:success'
   | 'modal:close';
 
 export interface EventPayloads {
-  'catalog:loaded': { products: Product[] };
-  'product:selected': { productId: string };
-  'detail:added': { product: Product };
-  'basket:updated': { items: BasketItem[] };
-  'basket:opened': undefined;
+  'catalog:loaded': { products: ProductDto[] };
+  'card:select': { productId: string };
+  'preview:change': { product: ProductDto };
+  'detail:add': { productId: string };
+  'cart:updated': { items: string[] };
+  'basket:open': undefined;
   'checkout:init': undefined;
-  'order:updated': { data: Partial<OrderData> };
-  'order:submitted': { data: OrderData };
-  'order:success': { response: OrderResult };
+  'form:validated': { result: ValidationResult };
+  'order:submit': { data: OrderRequestDto };
+  'order:success': { response: OrderResponseDto };
   'modal:close': undefined;
 }
